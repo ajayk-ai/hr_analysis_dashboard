@@ -13,3 +13,5 @@ wheels/
 .env
 service.json
 *service-account*.json
+
+.claude/

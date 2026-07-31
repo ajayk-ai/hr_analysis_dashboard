@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchDashboard, fetchFilterOptions } from "./api";
 import { CumulativeArea, MonthlyBars, ShareBar } from "./components/charts";
+import { MoonIcon, ResetIcon, SunIcon, TableIcon } from "./components/icons";
+import { KpiRow } from "./components/kpis";
 import {
   BreakdownTable,
   EffectivenessTable,
@@ -122,7 +124,16 @@ export default function App() {
       </div>
     );
   }
-  if (!data) return <div className="state">Loading dashboard…</div>;
+  if (!data) {
+    return (
+      <div className="page">
+        <div className="state">
+          <div className="spinner" aria-hidden="true" />
+          Loading dashboard…
+        </div>
+      </div>
+    );
+  }
 
   const {
     effectiveness,
@@ -144,23 +155,32 @@ export default function App() {
 
   return (
     <div className="page">
+      {refetching ? <div className="progress-bar" aria-hidden="true" /> : null}
+
       <header className="masthead">
-        <div>
-          <h1>HR Absentee Follow-up Call AI Analytics</h1>
-          <p className="sub">
-            {prettyMonth(data.generated_for_month)} · {scopeLabel} ·{" "}
-            {effectiveness.valid_discussions.toLocaleString()} of{" "}
-            {effectiveness.processed_rows.toLocaleString()} processed rows
-          </p>
+        <div className="masthead-title">
+          <span className="masthead-icon" aria-hidden="true">
+            <TableIcon width={19} height={19} />
+          </span>
+          <div>
+            <h1>HR Absentee Follow-up Call AI Analytics</h1>
+            <p className="sub">
+              {prettyMonth(data.generated_for_month)} · {scopeLabel} ·{" "}
+              {effectiveness.valid_discussions.toLocaleString()} of{" "}
+              {effectiveness.processed_rows.toLocaleString()} processed rows
+            </p>
+          </div>
         </div>
         <div className="masthead-actions">
           <button className="ghost" onClick={() => setShowTables((v) => !v)}>
+            <TableIcon />
             {showTables ? "Hide data tables" : "Show data tables"}
           </button>
           <button
             className="ghost"
             onClick={() => setMode(mode === "dark" ? "light" : "dark")}
           >
+            {mode === "dark" ? <SunIcon /> : <MoonIcon />}
             {mode === "dark" ? "Light mode" : "Dark mode"}
           </button>
         </div>
@@ -234,11 +254,20 @@ export default function App() {
             setScope("valid_only");
           }}
         >
+          <ResetIcon />
           Reset
         </button>
       </div>
 
       <div className={refetching ? "refetching" : undefined}>
+        <KpiRow
+          effectiveness={effectiveness}
+          risk={risk}
+          intimation={intimation}
+          cumulative={cumulative}
+          tokens={tokens}
+        />
+
         <Section num="1" title="Six month trend analysis">
           <div className="grid-2">
             <div className="card">
@@ -324,8 +353,18 @@ export default function App() {
           </p>
         </Section>
 
+        <Section num="3" title="Attrition risk analysis">
+          <ShareBar items={risk.items} colors={riskColors} tokens={tokens} />
+          <BreakdownTable
+            items={risk.items}
+            total={risk.total}
+            labelHeader="Risk level"
+            colors={riskColors}
+          />
+        </Section>
+
         <div className="grid-wide-first">
-          <Section num="3" title="Critical insights to MD">
+          <Section num="4" title="Critical insights">
             <MdInsightsTable data={insights} />
             <p className="notice">
               Break-ups group the free-text AI sub-reason into keyword themes and
@@ -334,7 +373,7 @@ export default function App() {
             </p>
           </Section>
 
-          <Section num="4" title="Return commitment tracking">
+          <Section num="5" title="Return commitment tracking">
             <ShareBar
               items={commitment.items}
               colors={commitmentColors}
@@ -348,13 +387,13 @@ export default function App() {
             />
           </Section>
 
-          <Section num="5" title="HR call effectiveness metrics">
+          <Section num="6" title="HR call effectiveness metrics">
             <EffectivenessTable data={effectiveness} />
           </Section>
         </div>
 
-        <div className="grid-wide-first">
-          <Section num="6" title="Reason-wise detailed breakdown">
+        <div className="grid-2">
+          <Section num="7" title="Reason-wise detailed breakdown">
             <BreakdownTable
               items={subReasons.items}
               total={subReasons.total}
@@ -362,21 +401,11 @@ export default function App() {
             />
           </Section>
 
-          <Section num="7" title="Intimation compliance">
+          <Section num="8" title="Intimation compliance">
             <BreakdownTable
               items={intimation.items}
               total={intimation.total}
               labelHeader="Compliance level"
-            />
-          </Section>
-
-          <Section num="8" title="Attrition risk analysis">
-            <ShareBar items={risk.items} colors={riskColors} tokens={tokens} />
-            <BreakdownTable
-              items={risk.items}
-              total={risk.total}
-              labelHeader="Risk level"
-              colors={riskColors}
             />
           </Section>
         </div>
