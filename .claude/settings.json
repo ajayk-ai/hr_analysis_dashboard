@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(uv run python -c ' *)"
+      "Bash(uv run python -c ' *)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://127.0.0.1:5183/\" -UseBasicParsing -TimeoutSec 5; Write-Output \"status=$\\($r.StatusCode\\)\" } catch { Write-Output \"ERR: $\\($_.Exception.Message\\)\" })"
     ]
   }
 }

@@ -17,6 +17,14 @@
   --shadow-sm: 0 1px 2px rgba(11, 11, 11, 0.05), 0 1px 1px rgba(11, 11, 11, 0.04);
   --shadow-md: 0 10px 24px rgba(11, 11, 11, 0.09), 0 2px 6px rgba(11, 11, 11, 0.05);
   --shadow-header: 0 6px 20px rgba(42, 120, 214, 0.22);
+  /* Frosted-glass surfaces -- light mode only. Dark mode redefines these to
+     a flat, opaque surface with no blur (see the two dark blocks below). */
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-blur: blur(16px) saturate(160%);
+  /* Faint tinted backdrop so the glass surfaces above have something to
+     blur against -- flat color alone reads as "translucent", not "glass". */
+  --body-glow: radial-gradient(760px circle at 12% -8%, rgba(42, 120, 214, 0.08), transparent 60%),
+    radial-gradient(680px circle at 96% 10%, rgba(235, 104, 52, 0.06), transparent 55%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,6 +45,9 @@
     --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.03);
     --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
     --shadow-header: 0 6px 20px rgba(0, 0, 0, 0.45);
+    --glass-bg: var(--surface);
+    --glass-blur: none;
+    --body-glow: none;
   }
 }
 
@@ -57,6 +68,9 @@
   --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.03);
   --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
   --shadow-header: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --glass-bg: var(--surface);
+  --glass-blur: none;
+  --body-glow: none;
 }
 
 * {
@@ -66,6 +80,8 @@
 body {
   margin: 0;
   background: var(--plane);
+  background-image: var(--body-glow);
+  background-attachment: fixed;
   color: var(--text-primary);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 14px;
@@ -162,7 +178,9 @@ button.ghost,
   flex-wrap: wrap;
   gap: 14px;
   align-items: flex-end;
-  background: var(--surface);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px 16px;
@@ -245,7 +263,9 @@ button.ghost:active {
   margin-top: 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
@@ -289,27 +309,13 @@ button.ghost:active {
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
 }
-/* Detail-table row: the break-up column needs the extra width. */
-.grid-wide-first {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr;
-  gap: 16px;
-  align-items: start;
-}
-@media (max-width: 1200px) {
-  .grid-wide-first {
-    grid-template-columns: 1fr;
-  }
-}
-.grid-wide-first > .section {
-  margin-top: 16px;
-}
-
 .card {
   border: 1px solid var(--border);
   border-radius: 9px;
   padding: 13px;
-  background: var(--surface);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   min-width: 0;
   box-shadow: var(--shadow-sm);
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.18s ease,
@@ -339,7 +345,9 @@ button.ghost:active {
 }
 .kpi-tile {
   position: relative;
-  background: var(--surface);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 15px 14px 13px;

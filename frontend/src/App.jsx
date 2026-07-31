@@ -353,27 +353,18 @@ export default function App() {
           </p>
         </Section>
 
-        <Section num="3" title="Attrition risk analysis">
-          <ShareBar items={risk.items} colors={riskColors} tokens={tokens} />
-          <BreakdownTable
-            items={risk.items}
-            total={risk.total}
-            labelHeader="Risk level"
-            colors={riskColors}
-          />
-        </Section>
-
-        <div className="grid-wide-first">
-          <Section num="4" title="Critical insights">
-            <MdInsightsTable data={insights} />
-            <p className="notice">
-              Break-ups group the free-text AI sub-reason into keyword themes and
-              show each area's leading themes, so they need not sum to the area
-              total. The risk row overlaps the categories above it.
-            </p>
+        <div className="grid-3">
+          <Section num="3" title="Attrition risk analysis">
+            <ShareBar items={risk.items} colors={riskColors} tokens={tokens} />
+            <BreakdownTable
+              items={risk.items}
+              total={risk.total}
+              labelHeader="Risk level"
+              colors={riskColors}
+            />
           </Section>
 
-          <Section num="5" title="Return commitment tracking">
+          <Section num="4" title="Return commitment tracking">
             <ShareBar
               items={commitment.items}
               colors={commitmentColors}
@@ -387,25 +378,34 @@ export default function App() {
             />
           </Section>
 
-          <Section num="6" title="HR call effectiveness metrics">
+          <Section num="5" title="HR call effectiveness metrics">
             <EffectivenessTable data={effectiveness} />
           </Section>
-        </div>
 
-        <div className="grid-2">
-          <Section num="7" title="Reason-wise detailed breakdown">
-            <BreakdownTable
-              items={subReasons.items}
-              total={subReasons.total}
-              labelHeader="Sub reason theme"
-            />
-          </Section>
-
-          <Section num="8" title="Intimation compliance">
+          <Section num="6" title="Intimation compliance">
             <BreakdownTable
               items={intimation.items}
               total={intimation.total}
               labelHeader="Compliance level"
+            />
+          </Section>
+        </div>
+
+        <div className="grid-2">
+          <Section num="7" title="Critical insights">
+            <MdInsightsTable data={insights} />
+            <p className="notice">
+              Break-ups group the free-text AI sub-reason into keyword themes and
+              show each area's leading themes, so they need not sum to the area
+              total. The risk row overlaps the categories above it.
+            </p>
+          </Section>
+
+          <Section num="8" title="Reason-wise detailed breakdown">
+            <BreakdownTable
+              items={subReasons.items}
+              total={subReasons.total}
+              labelHeader="Sub reason theme"
             />
           </Section>
         </div>
