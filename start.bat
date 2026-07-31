@@ -53,7 +53,7 @@ if not exist "%ROOT%service.json" (
 )
 
 echo.
-echo [1/4] Installing backend dependencies (uv sync)...
+echo [1/5] Installing backend dependencies (uv sync)...
 call uv sync --frozen
 if errorlevel 1 (
     echo [ERROR] uv sync failed.
@@ -61,7 +61,16 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/4] Running database migrations (alembic upgrade head)...
+echo [2/5] Ensuring the database exists (first-time setup safe)...
+call uv run python scripts\ensure_db.py
+if errorlevel 1 (
+    echo [ERROR] Could not reach Postgres or create the database. Check DB_* in .env
+    echo         and confirm the Postgres server is installed and running.
+    goto :fail
+)
+
+echo.
+echo [3/5] Running database migrations (alembic upgrade head)...
 call uv run alembic upgrade head
 if errorlevel 1 (
     echo [ERROR] alembic upgrade failed. Check DB_* settings in .env.
@@ -69,7 +78,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [3/4] Installing frontend dependencies and building...
+echo [4/5] Installing frontend dependencies and building...
 pushd "%ROOT%frontend"
 call npm install
 if errorlevel 1 (
@@ -86,7 +95,7 @@ if errorlevel 1 (
 popd
 
 echo.
-echo [4/4] Starting server (API + dashboard on one port)...
+echo [5/5] Starting server (API + dashboard on one port)...
 echo   App: http://localhost:%API_PORT%
 echo   API: http://localhost:%API_PORT%/api  (docs at /docs)
 echo.
