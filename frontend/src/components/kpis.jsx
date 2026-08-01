@@ -34,7 +34,7 @@ export function KpiRow({ effectiveness, risk, intimation, cumulative, tokens }) 
 
   const tiles = [
     {
-      label: "Processed rows",
+      label: "Processed calls",
       value: effectiveness.processed_rows.toLocaleString(),
       caption: "in current filter",
       accent: tokens.volume,

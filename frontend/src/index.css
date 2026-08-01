@@ -446,6 +446,18 @@ tr.total td {
 tr.total:hover {
   background: transparent;
 }
+
+/* Sticky header for the taller tables (many rows in a fixed-height card). */
+.table-wrap.scroll {
+  max-height: var(--th-max-height, 420px);
+  overflow-y: auto;
+}
+.table-wrap.scroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--band);
+  z-index: 1;
+}
 .swatch {
   display: inline-block;
   width: 10px;

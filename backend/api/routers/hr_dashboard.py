@@ -141,7 +141,7 @@ def get_effectiveness(
         high_risk_cases=row.high_risk,
         metrics=[
             EffectivenessMetric(
-                metric="Processed Rows", calls=processed, rate=100.0, basis="processed"
+                metric="Processed Calls", calls=processed, rate=100.0, basis="processed"
             ),
             EffectivenessMetric(
                 metric="Valid Discussions",

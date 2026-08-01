@@ -13,16 +13,22 @@ export function Section({ num, title, children }) {
 
 const pct = (value) => `${value.toFixed(1)}%`;
 
-/** Label / calls / % table -- the table-view twin every chart needs. */
+/** Label / calls / % table -- the table-view twin every chart needs.
+ * `maxHeight`, when given, turns on a scrolling body with a sticky header --
+ * for tables with more rows than comfortably fit in a card. */
 export function BreakdownTable({
   items,
   total,
   labelHeader = "Category",
   colors,
   showTotal = true,
+  maxHeight,
 }) {
   return (
-    <div className="table-wrap">
+    <div
+      className={`table-wrap${maxHeight ? " scroll" : ""}`}
+      style={maxHeight ? { "--th-max-height": `${maxHeight}px` } : undefined}
+    >
       <table>
         <thead>
           <tr>
@@ -77,7 +83,7 @@ export function EffectivenessTable({ data }) {
               <td className="num">{metric.calls.toLocaleString()}</td>
               <td className="num">{pct(metric.rate)}</td>
               <td style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                of {metric.basis === "valid" ? "valid discussions" : "processed rows"}
+                of {metric.basis === "valid" ? "valid discussions" : "processed calls"}
               </td>
             </tr>
           ))}
@@ -88,14 +94,16 @@ export function EffectivenessTable({ data }) {
 }
 
 /** Section 3: category areas with their leading sub-reason themes. */
-export function MdInsightsTable({ data }) {
+export function MdInsightsTable({ data, maxHeight }) {
   return (
-    <div className="table-wrap">
+    <div
+      className={`table-wrap${maxHeight ? " scroll" : ""}`}
+      style={maxHeight ? { "--th-max-height": `${maxHeight}px` } : undefined}
+    >
       <table>
         <thead>
           <tr>
             <th>Area</th>
-            <th>Key break-up</th>
             <th className="num">Calls</th>
             <th className="num">%</th>
           </tr>
@@ -104,11 +112,6 @@ export function MdInsightsTable({ data }) {
           {data.areas.map((area) => (
             <tr key={area.area}>
               <td style={{ whiteSpace: "nowrap" }}>{area.area}</td>
-              <td style={{ color: "var(--text-secondary)" }}>
-                {area.breakup
-                  .map((item) => `${item.label} ${item.count}`)
-                  .join(" + ")}
-              </td>
               <td className="num">{area.calls.toLocaleString()}</td>
               <td className="num">{pct(area.percentage)}</td>
             </tr>

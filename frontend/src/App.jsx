@@ -148,7 +148,7 @@ export default function App() {
   } = data;
 
   const scopeLabel =
-    scope === "valid_only" ? "valid discussions" : "all processed rows";
+    scope === "valid_only" ? "valid discussions" : "all processed calls";
   const commitmentColors = ordinalSteps(tokens, commitment.items.length);
   // Risk is ordered low -> high, so the ramp runs with it.
   const riskColors = ordinalSteps(tokens, risk.items.length);
@@ -167,7 +167,7 @@ export default function App() {
             <p className="sub">
               {prettyMonth(data.generated_for_month)} · {scopeLabel} ·{" "}
               {effectiveness.valid_discussions.toLocaleString()} of{" "}
-              {effectiveness.processed_rows.toLocaleString()} processed rows
+              {effectiveness.processed_rows.toLocaleString()} processed calls
             </p>
           </div>
         </div>
@@ -241,7 +241,7 @@ export default function App() {
             onChange={(e) => setScope(e.target.value)}
           >
             <option value="valid_only">Valid discussions only</option>
-            <option value="all">All processed rows</option>
+            <option value="all">All processed calls</option>
           </select>
         </div>
         <div className="filters-spacer" />
@@ -393,11 +393,9 @@ export default function App() {
 
         <div className="grid-2">
           <Section num="7" title="Critical insights">
-            <MdInsightsTable data={insights} />
+            <MdInsightsTable data={insights} maxHeight={420} />
             <p className="notice">
-              Break-ups group the free-text AI sub-reason into keyword themes and
-              show each area's leading themes, so they need not sum to the area
-              total. The risk row overlaps the categories above it.
+              The risk row overlaps the categories above it.
             </p>
           </Section>
 
@@ -406,6 +404,7 @@ export default function App() {
               items={subReasons.items}
               total={subReasons.total}
               labelHeader="Sub reason theme"
+              maxHeight={420}
             />
           </Section>
         </div>
