@@ -28,15 +28,29 @@ function findItem(items, label) {
 
 /** Headline numbers row -- the "handful of KPIs" the dashboard leads with,
  * pulled from data already on the page rather than a separate request. */
-export function KpiRow({ effectiveness, risk, intimation, cumulative, tokens }) {
+export function KpiRow({
+  effectiveness,
+  callActivity,
+  risk,
+  intimation,
+  cumulative,
+  scopeLabel,
+  tokens,
+}) {
   const highRisk = findItem(risk.items, "High Risk");
   const gap = findItem(intimation.items, "No Proper Intimation");
 
   const tiles = [
     {
+      label: "Total calls",
+      value: callActivity.total_calls.toLocaleString(),
+      caption: `${callActivity.answer_rate.toFixed(1)}% answered`,
+      accent: tokens.volume,
+    },
+    {
       label: "Processed calls",
       value: effectiveness.processed_rows.toLocaleString(),
-      caption: "in current filter",
+      caption: "answered and analysed",
       accent: tokens.volume,
     },
     {
@@ -51,16 +65,20 @@ export function KpiRow({ effectiveness, risk, intimation, cumulative, tokens }) 
       caption: `${effectiveness.positive_commitment.toLocaleString()} calls`,
       accent: GOOD,
     },
+    // These two read the scope-following breakdowns, so their share is of
+    // whatever the current scope counts -- not always valid discussions.
     {
       label: "High risk cases",
       value: (highRisk?.count ?? 0).toLocaleString(),
-      caption: highRisk ? `${highRisk.percentage.toFixed(1)}% of valid` : "—",
+      caption: highRisk
+        ? `${highRisk.percentage.toFixed(1)}% of ${scopeLabel}`
+        : "—",
       accent: CRITICAL,
     },
     {
       label: "Intimation gap",
       value: (gap?.count ?? 0).toLocaleString(),
-      caption: gap ? `${gap.percentage.toFixed(1)}% of valid` : "—",
+      caption: gap ? `${gap.percentage.toFixed(1)}% of ${scopeLabel}` : "—",
       accent: WARNING,
     },
     {

@@ -336,6 +336,36 @@ button.ghost:active {
   color: var(--text-secondary);
 }
 
+/* ---- inline stat strip: a few counts above a section's own content ---- */
+.stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  align-items: baseline;
+  background: var(--band);
+  border-radius: 8px;
+  padding: 11px 14px;
+  margin-bottom: 16px;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-label {
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.15;
+}
+
 /* ---- KPI row: the headline numbers the dashboard leads with ---- */
 .kpi-row {
   display: grid;

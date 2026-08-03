@@ -7,7 +7,7 @@ from enum import Enum
 from fastapi import HTTPException, Query
 from sqlalchemy import ColumnElement, or_
 
-from backend.service.models import PreprocessCallLog
+from backend.service.models import CallLog, PreprocessCallLog
 
 # Enforces the exact YYYY-MM-DD shape; date.fromisoformat alone would also
 # accept forms like '20260730' that break string comparison against call_date.
@@ -20,13 +20,21 @@ VALID_DISCUSSION_YES = "Yes"
 class Scope(str, Enum):
     """Which rows the analytics denominators cover.
 
-    `valid_only` matches the HR dashboard spec: every distribution is a share of
-    valid discussions, with total processed rows reported separately in the
-    effectiveness funnel.
+    `total_calls` is the default: every call HR dialled, read from `call_logs`.
+    Calls nobody picked up never reach the AI pipeline, so they carry no
+    category, risk level or commitment and land in each breakdown's
+    "Unspecified" bucket -- deliberately, so the charts show HR's real workload
+    rather than only the analysed slice.
+
+    `all` narrows to `preprocess_call_log` (answered *and* recorded, so the AI
+    had something to analyse). `valid_only` narrows again to valid discussions,
+    matching the original dashboard spec, with total processed calls reported
+    separately in the effectiveness funnel.
     """
 
-    valid_only = "valid_only"
+    total_calls = "total_calls"
     all = "all"
+    valid_only = "valid_only"
 
 # Free-text columns scanned by the `search` parameter.
 _SEARCH_COLUMNS = (
@@ -70,7 +78,7 @@ class CallLogFilters:
     comparison is a correct date-range filter.
     """
 
-    scope: Scope = Scope.valid_only
+    scope: Scope = Scope.total_calls
     month: str | None = None
     date_from: str | None = None
     date_to: str | None = None
@@ -90,7 +98,7 @@ class CallLogFilters:
 
     def conditions(
         self,
-        model=PreprocessCallLog,
+        model=CallLog,
         *,
         include_scope: bool = True,
         include_dates: bool = True,
@@ -98,11 +106,20 @@ class CallLogFilters:
         """Filter conditions for this model.
 
         `include_scope=False` is for the effectiveness funnel, which must count
-        all processed rows to report the valid share. `include_dates=False` is
-        for the rolling 6-month series, where the month filter selects the
-        window's end rather than clipping the window itself.
+        all rows in scope to report the valid share; it drops the
+        valid-discussion narrowing but keeps the scope's base table narrowing,
+        so the funnel's denominator still matches the scope the user picked.
+        `include_dates=False` is for the rolling 6-month series, where the
+        month filter selects the window's end rather than clipping the window.
         """
         conds: list[ColumnElement[bool]] = []
+
+        # Everything reads call_logs; the narrower scopes reproduce
+        # preprocess_call_log by its own mirror rule (see preprocess_service:
+        # the mirror is exactly call_logs with a google_drive_link). Applied
+        # regardless of include_scope -- it selects the table, not the funnel.
+        if self.scope in (Scope.all, Scope.valid_only):
+            conds.append(model.google_drive_link.is_not(None))
 
         # An explicit valid_discussion filter beats the coarse scope switch.
         if (
@@ -149,15 +166,34 @@ class CallLogFilters:
 
         return conds
 
-    def apply(self, stmt, model=PreprocessCallLog, **kwargs):
+    def date_conditions(self, model=CallLog) -> list[ColumnElement[bool]]:
+        """Date-range conditions alone, ignoring scope.
+
+        For the call-activity counts, which must stay on the full `call_logs`
+        whatever the scope: an unanswered row never reached the AI pipeline, so
+        it carries no category/risk/valid_discussion. Applying the analysis
+        filters there would silently drop every unanswered call and report a
+        100% answer rate.
+        """
+        conds: list[ColumnElement[bool]] = []
+        if self.date_from:
+            conds.append(model.call_date >= self.date_from)
+        if self.date_to:
+            conds.append(model.call_date <= self.date_to)
+        return conds
+
+    def apply(self, stmt, model=CallLog, **kwargs):
         conds = self.conditions(model, **kwargs)
         return stmt.where(*conds) if conds else stmt
 
 
 def call_log_filters(
     scope: Scope = Query(
-        Scope.valid_only,
-        description="valid_only (dashboard default) counts only valid discussions",
+        Scope.total_calls,
+        description=(
+            "total_calls (default) counts every dialled call from call_logs; "
+            "all counts analysed calls; valid_only counts valid discussions"
+        ),
     ),
     month: str | None = Query(
         None, description="Convenience month filter, YYYY-MM; overrides date bounds"

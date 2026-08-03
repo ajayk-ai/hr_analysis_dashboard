@@ -13,9 +13,10 @@ from sqlalchemy import Integer, cast, func, select
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_db
-from backend.api.filters import CallLogFilters, call_log_filters
+from backend.api.filters import CallLogFilters, Scope, call_log_filters
 from backend.api.schemas import (
     BreakdownItem,
+    CallActivityResponse,
     CategoryTrend,
     CategoryTrendsResponse,
     CumulativePoint,
@@ -30,7 +31,7 @@ from backend.api.schemas import (
     MonthlyTrendResponse,
     MonthPoint,
 )
-from backend.service.models import PreprocessCallLog as P
+from backend.service.models import CallLog as L
 from backend.service.sub_reason_themes import theme_expression
 
 router = APIRouter(prefix="/hr-dashboard", tags=["hr-dashboard"])
@@ -45,8 +46,8 @@ SUPERVISOR_INTIMATION = "Supervisor / Manager Informed"
 INDIRECT_INTIMATION = "Indirect / Informal Intimation"
 UNSPECIFIED = "Unspecified"
 
-MONTH_EXPR = func.substr(P.call_date, 1, 7)
-DAY_EXPR = cast(func.substr(P.call_date, 9, 2), Integer)
+MONTH_EXPR = func.substr(L.call_date, 1, 7)
+DAY_EXPR = cast(func.substr(L.call_date, 9, 2), Integer)
 
 # Shared by the Query defaults and the composite endpoint below, which calls the
 # handlers directly and so must pass real values rather than Query objects.
@@ -84,11 +85,11 @@ def _anchor_month(db: Session, filters: CallLogFilters) -> str:
     """The dashboard's 'current month': the newest month in the filtered data,
     so the Month filter selects which month the widgets centre on."""
     latest = db.scalar(
-        select(func.max(MONTH_EXPR)).select_from(P).where(*filters.conditions())
+        select(func.max(MONTH_EXPR)).select_from(L).where(*filters.conditions())
     )
     if latest:
         return latest
-    fallback = db.scalar(select(func.max(MONTH_EXPR)).select_from(P))
+    fallback = db.scalar(select(func.max(MONTH_EXPR)).select_from(L))
     return fallback or "1970-01"
 
 
@@ -105,28 +106,74 @@ def _grouped(rows: list[tuple[str | None, int]]) -> GroupedBreakdownResponse:
     )
 
 
+@router.get("/call-activity", response_model=CallActivityResponse)
+def get_call_activity(
+    db: Session = Depends(get_db),
+    filters: CallLogFilters = Depends(call_log_filters),
+) -> CallActivityResponse:
+    """HR dialling effort, read from `call_logs` rather than the analysed
+    mirror: how many calls HR made, and how many were actually picked up.
+
+    Deliberately date-filtered only. An unanswered call never reaches the AI
+    pipeline, so it has no category, risk level or valid_discussion -- honouring
+    those filters here would drop every unanswered row and report a 100%
+    answer rate.
+    """
+    answered = func.coalesce(L.duration, 0) > 0
+    # The same rule that builds preprocess_call_log, so analysed_calls
+    # reconciles with the effectiveness funnel under scope=all.
+    analysed = L.google_drive_link.is_not(None)
+
+    row = db.execute(
+        select(
+            func.count().label("total"),
+            _count_if(answered).label("answered"),
+            _count_if(analysed).label("analysed"),
+        )
+        .select_from(L)
+        .where(*filters.date_conditions(L))
+    ).one()
+
+    return CallActivityResponse(
+        total_calls=row.total,
+        answered_calls=row.answered,
+        unanswered_calls=row.total - row.answered,
+        analysed_calls=row.analysed,
+        answer_rate=_pct(row.answered, row.total),
+    )
+
+
 @router.get("/effectiveness", response_model=EffectivenessResponse)
 def get_effectiveness(
     db: Session = Depends(get_db),
     filters: CallLogFilters = Depends(call_log_filters),
 ) -> EffectivenessResponse:
-    """Section 5. Counts every processed row, then the valid share of it."""
+    """Section 5. Counts every processed call, then the valid share of it."""
     # Deliberately scope-free: this endpoint reports the valid share itself.
     conds = filters.conditions(include_scope=False)
+
+    # This funnel measures conversation quality, which only exists for calls the
+    # AI actually analysed -- so it stays on those even under scope=total_calls.
+    # Counting a call nobody answered as "processed" would be wrong twice over:
+    # it never was, and processed - valid would file it under "Invalid / No
+    # Discussion" when there was no discussion to judge. HR's dialling effort is
+    # reported by /call-activity instead.
+    if filters.scope is Scope.total_calls:
+        conds.append(L.google_drive_link.is_not(None))
 
     row = db.execute(
         select(
             func.count().label("processed"),
-            _count_if(P.valid_discussion == VALID_YES).label("valid"),
+            _count_if(L.valid_discussion == VALID_YES).label("valid"),
             _count_if(
-                (P.valid_discussion == VALID_YES)
-                & (P.commitment == CONFIRMED_COMMITMENT)
+                (L.valid_discussion == VALID_YES)
+                & (L.commitment == CONFIRMED_COMMITMENT)
             ).label("commitment"),
             _count_if(
-                (P.valid_discussion == VALID_YES) & (P.risk_level == HIGH_RISK)
+                (L.valid_discussion == VALID_YES) & (L.risk_level == HIGH_RISK)
             ).label("high_risk"),
         )
-        .select_from(P)
+        .select_from(L)
         .where(*conds)
     ).one()
 
@@ -185,7 +232,7 @@ def get_monthly_trend(
     counts = dict(
         db.execute(
             select(MONTH_EXPR.label("month"), func.count())
-            .select_from(P)
+            .select_from(L)
             .where(
                 *filters.conditions(include_dates=False),
                 MONTH_EXPR.in_(window),
@@ -211,7 +258,7 @@ def _cumulative_points(
     per_day = dict(
         db.execute(
             select(DAY_EXPR.label("day"), func.count())
-            .select_from(P)
+            .select_from(L)
             .where(
                 *filters.conditions(include_dates=False),
                 *extra_conds,
@@ -258,10 +305,10 @@ def get_category_trends(
     base = filters.conditions(include_dates=False)
 
     rows = db.execute(
-        select(P.category, MONTH_EXPR.label("month"), func.count().label("calls"))
-        .select_from(P)
+        select(L.category, MONTH_EXPR.label("month"), func.count().label("calls"))
+        .select_from(L)
         .where(*base, MONTH_EXPR.in_(window))
-        .group_by(P.category, MONTH_EXPR)
+        .group_by(L.category, MONTH_EXPR)
     ).all()
 
     by_category: dict[str, dict[str, int]] = {}
@@ -275,7 +322,7 @@ def get_category_trends(
         by_category.items(), key=lambda kv: kv[1].get(anchor, 0), reverse=True
     ):
         # Null categories are stored as NULL, not the display label.
-        cond = P.category.is_(None) if category == UNSPECIFIED else P.category == category
+        cond = L.category.is_(None) if category == UNSPECIFIED else L.category == category
         current = monthly.get(anchor, 0)
         categories.append(
             CategoryTrend(
@@ -308,14 +355,14 @@ def get_md_insights(
 ) -> MdInsightsResponse:
     """Section 3: each absence category with its leading sub-reason themes, plus
     a risk row -- the 'Surgery 30 + fever 25 + ENT 16' style break-up."""
-    theme = theme_expression(P.sub_reason)
+    theme = theme_expression(L.sub_reason)
     conds = filters.conditions()
 
     rows = db.execute(
-        select(P.category, theme.label("theme"), func.count().label("calls"))
-        .select_from(P)
+        select(L.category, theme.label("theme"), func.count().label("calls"))
+        .select_from(L)
         .where(*conds)
-        .group_by(P.category, theme)
+        .group_by(L.category, theme)
     ).all()
 
     total = sum(calls for _, _, calls in rows)
@@ -342,10 +389,10 @@ def get_md_insights(
         )
 
     high_risk = db.scalar(
-        select(func.count()).select_from(P).where(*conds, P.risk_level == HIGH_RISK)
+        select(func.count()).select_from(L).where(*conds, L.risk_level == HIGH_RISK)
     ) or 0
     gap = db.scalar(
-        select(func.count()).select_from(P).where(*conds, P.intimation == INTIMATION_GAP)
+        select(func.count()).select_from(L).where(*conds, L.intimation == INTIMATION_GAP)
     ) or 0
     areas.append(
         InsightArea(
@@ -369,10 +416,10 @@ def get_sub_reason_breakdown(
     limit: int = Query(DEFAULT_SUB_REASON_LIMIT, ge=1, le=50),
 ) -> GroupedBreakdownResponse:
     """Section 6: free-text sub_reason folded into keyword themes."""
-    theme = theme_expression(P.sub_reason)
+    theme = theme_expression(L.sub_reason)
     rows = db.execute(
         select(theme.label("theme"), func.count().label("calls"))
-        .select_from(P)
+        .select_from(L)
         .where(*filters.conditions())
         .group_by(theme)
         .order_by(func.count().desc())
@@ -387,10 +434,10 @@ def get_commitment_tracking(
     filters: CallLogFilters = Depends(call_log_filters),
 ) -> GroupedBreakdownResponse:
     """Section 4: return commitment, in the dashboard's three buckets."""
-    bucket = func.coalesce(P.commitment, UNSPECIFIED)
+    bucket = func.coalesce(L.commitment, UNSPECIFIED)
     rows = db.execute(
         select(bucket.label("bucket"), func.count().label("calls"))
-        .select_from(P)
+        .select_from(L)
         .where(*filters.conditions())
         .group_by(bucket)
     ).all()
@@ -408,10 +455,10 @@ def get_intimation_compliance(
     """Section 7: intimation channels, with the long tail of minor channels
     (contractor, co-worker) folded into one bucket."""
     rows = db.execute(
-        select(P.intimation, func.count().label("calls"))
-        .select_from(P)
+        select(L.intimation, func.count().label("calls"))
+        .select_from(L)
         .where(*filters.conditions())
-        .group_by(P.intimation)
+        .group_by(L.intimation)
     ).all()
 
     named = {
@@ -440,10 +487,10 @@ def get_risk_analysis(
     filters: CallLogFilters = Depends(call_log_filters),
 ) -> GroupedBreakdownResponse:
     """Section 8: attrition risk levels, ordered low to high."""
-    bucket = func.coalesce(P.risk_level, UNSPECIFIED)
+    bucket = func.coalesce(L.risk_level, UNSPECIFIED)
     rows = db.execute(
         select(bucket.label("bucket"), func.count().label("calls"))
-        .select_from(P)
+        .select_from(L)
         .where(*filters.conditions())
         .group_by(bucket)
     ).all()
@@ -463,6 +510,7 @@ def get_hr_dashboard(
     and no widget can disagree with another about the filter state."""
     return HrDashboardResponse(
         generated_for_month=_anchor_month(db, filters),
+        call_activity=get_call_activity(db, filters),
         effectiveness=get_effectiveness(db, filters),
         monthly_valid_discussions=get_monthly_trend(db, filters, months),
         current_month_cumulative=get_current_month_cumulative(db, filters),

@@ -30,7 +30,9 @@ def list_preprocess_call_logs(
 ) -> CallLogPage:
     """Paginated call detail records, driven by the same filter set as the
     analytics endpoints so a dashboard can drill down from any widget."""
-    stmt = filters.apply(select(PreprocessCallLog))
+    # Pinned to the analysed mirror by name -- unlike the analytics endpoints,
+    # this one does not follow `scope` onto call_logs. Use /call-logs for those.
+    stmt = filters.apply(select(PreprocessCallLog), PreprocessCallLog)
 
     order_col = getattr(PreprocessCallLog, sort_by.value)
     ordering = order_col.desc().nullslast() if descending else order_col.asc()

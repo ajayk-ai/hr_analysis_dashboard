@@ -44,11 +44,13 @@ uv run python -m backend.service.sheets_sync_service
 
 ## API
 
-Interactive docs at `/docs`.
+Interactive docs at `/docs`. **Every route below is served under `/api`**
+(e.g. `/api/hr-dashboard`); the app also serves the built `frontend/dist` at
+`/`, so one uvicorn process hosts both.
 
 | Group | Endpoints |
 |---|---|
-| Dashboard | `GET /hr-dashboard` (composite, one round trip), plus `/effectiveness`, `/monthly-trend`, `/cumulative`, `/category-trends`, `/md-insights`, `/sub-reasons`, `/commitment`, `/intimation-compliance`, `/risk-analysis` |
+| Dashboard | `GET /hr-dashboard` (composite, one round trip), plus `/call-activity`, `/effectiveness`, `/monthly-trend`, `/cumulative`, `/category-trends`, `/md-insights`, `/sub-reasons`, `/commitment`, `/intimation-compliance`, `/risk-analysis` |
 | Analytics | `/analytics/overview`, `/breakdown/{dimension}`, `/trend`, `/hourly`, `/risk-matrix`, `/employees`, `/filters` |
 | Records | `/preprocess-call-logs`, `/call-logs` |
 | Sync | `GET /sync/status`, `POST /sync/trigger` |
@@ -62,14 +64,42 @@ Every analytics endpoint shares one filter set (`backend/api/filters.py`):
 `min_duration`/`max_duration`, `search`. The multi-value ones are repeatable
 (`?category=A&category=B`).
 
-**`scope` defaults to `valid_only`**, so every distribution is a share of valid
-discussions while `/effectiveness` reports total processed rows separately —
-matching the dashboard spec. Pass `scope=all` to use every processed row.
+**`scope` selects which rows every widget counts, and defaults to
+`total_calls`:**
+
+| `scope` | Counts | Rows |
+|---|---|---|
+| `total_calls` *(default)* | every call HR dialled | all of `call_logs` |
+| `all` | answered *and* recorded, so the AI had something to analyse | `google_drive_link IS NOT NULL` |
+| `valid_only` | valid discussions (the original dashboard spec) | the above + `valid_discussion = 'Yes'` |
+
+Everything reads `call_logs`; the narrower scopes reproduce
+`preprocess_call_log` by its own mirror rule rather than joining to it (the
+mirror is *exactly* `call_logs` with a link — same ids, same values). Scope is
+therefore a `WHERE` clause, not a table switch.
+
+Under `total_calls` the unanswered calls carry no AI analysis at all, so they
+land in each breakdown's **`Unspecified`** bucket — deliberately, so the charts
+show HR's real workload rather than only the analysed slice. `/effectiveness`
+keeps reporting the valid share of its own denominator, and `/call-activity`
+ignores `scope` entirely (see below).
 
 ## Notes on the data
 
 Worth knowing before extending this:
 
+- **About half of `call_logs` was never answered.** Those rows have no
+  `google_drive_link` and almost all have `duration = 0`, so the mirror drops
+  them and the AI never sees them — they carry no `category`, `risk_level`,
+  `commitment` or `valid_discussion`. That is why they can only ever show up as
+  `Unspecified`, and why `scope` exists.
+- **`/call-activity` ignores `scope` and every analysis filter**, honouring only
+  the date range. It reports dialled / answered / unanswered / analysed off raw
+  `call_logs`, so it stays a fixed denominator for "how much did HR actually
+  work". Applying the analysis filters there would drop every unanswered call
+  and report a 100% answer rate. `answered` is `duration > 0`; `analysed` is the
+  recorded subset, and the two differ by a handful of answered-but-unrecorded
+  calls.
 - **`emp_*` is the HR caller, not the absentee.** The absentee employee is
   `client_number`; `/analytics/employees` keys on it and is the repeat-contact
   watchlist.

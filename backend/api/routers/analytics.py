@@ -22,7 +22,7 @@ from backend.api.schemas import (
     TrendPoint,
     TrendResponse,
 )
-from backend.service.models import PreprocessCallLog as P
+from backend.service.models import CallLog as L
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -37,7 +37,7 @@ ANALYSED = "Gemini analysed"
 UNSPECIFIED = "Unspecified"
 
 # Rows whose call_time is 'HH:MM' as well as 'HH:MM:SS' both yield the hour.
-HOUR_EXPR = cast(func.nullif(func.split_part(P.call_time, ":", 1), ""), Integer)
+HOUR_EXPR = cast(func.nullif(func.split_part(L.call_time, ":", 1), ""), Integer)
 
 
 class BreakdownDimension(str, Enum):
@@ -79,12 +79,12 @@ def _pct(part: int, whole: int) -> float:
 
 def _period_expr(granularity: Granularity):
     if granularity is Granularity.day:
-        return P.call_date
+        return L.call_date
     if granularity is Granularity.month:
-        return func.substr(P.call_date, 1, 7)
+        return func.substr(L.call_date, 1, 7)
     # Week buckets are labelled by their Monday.
     return func.to_char(
-        func.date_trunc("week", func.to_date(P.call_date, "YYYY-MM-DD")), "YYYY-MM-DD"
+        func.date_trunc("week", func.to_date(L.call_date, "YYYY-MM-DD")), "YYYY-MM-DD"
     )
 
 
@@ -99,26 +99,26 @@ def get_overview(
     row = db.execute(
         select(
             func.count().label("total_calls"),
-            func.count(distinct(P.client_number)).label("unique_employees"),
-            func.coalesce(func.sum(P.duration), 0).label("talk_time"),
-            func.coalesce(func.avg(P.duration), 0).label("avg_duration"),
-            _count_if(P.risk_level == HIGH_RISK).label("high_risk"),
-            _count_if(P.valid_discussion == VALID_DISCUSSION_YES).label("valid"),
-            _count_if(P.commitment == CONFIRMED_COMMITMENT).label("confirmed"),
-            _count_if(P.intimation == INTIMATION_GAP).label("gap"),
-            _count_if(P.analysis_status == ANALYSED).label("analysed"),
-            func.min(P.call_date).label("first_date"),
-            func.max(P.call_date).label("last_date"),
+            func.count(distinct(L.client_number)).label("unique_employees"),
+            func.coalesce(func.sum(L.duration), 0).label("talk_time"),
+            func.coalesce(func.avg(L.duration), 0).label("avg_duration"),
+            _count_if(L.risk_level == HIGH_RISK).label("high_risk"),
+            _count_if(L.valid_discussion == VALID_DISCUSSION_YES).label("valid"),
+            _count_if(L.commitment == CONFIRMED_COMMITMENT).label("confirmed"),
+            _count_if(L.intimation == INTIMATION_GAP).label("gap"),
+            _count_if(L.analysis_status == ANALYSED).label("analysed"),
+            func.min(L.call_date).label("first_date"),
+            func.max(L.call_date).label("last_date"),
         )
-        .select_from(P)
+        .select_from(L)
         .where(*conds)
     ).one()
 
     repeat_subq = (
-        select(P.client_number)
-        .select_from(P)
+        select(L.client_number)
+        .select_from(L)
         .where(*conds)
-        .group_by(P.client_number)
+        .group_by(L.client_number)
         .having(func.count() > 1)
         .subquery()
     )
@@ -153,12 +153,12 @@ def get_breakdown(
     filters: CallLogFilters = Depends(call_log_filters),
 ) -> BreakdownResponse:
     """Counts and shares per value of a categorical column (pie / bar charts)."""
-    column = getattr(P, dimension.value)
+    column = getattr(L, dimension.value)
 
     rows = db.execute(
         filters.apply(
             select(column, func.count().label("count"))
-            .select_from(P)
+            .select_from(L)
             .group_by(column)
             .order_by(func.count().desc())
         )
@@ -192,13 +192,13 @@ def get_trend(
         select(
             period.label("period"),
             func.count().label("calls"),
-            func.coalesce(func.avg(P.duration), 0).label("avg_duration"),
-            _count_if(P.risk_level == HIGH_RISK).label("high_risk"),
-            _count_if(P.valid_discussion == VALID_DISCUSSION_YES).label("valid"),
-            _count_if(P.intimation == INTIMATION_GAP).label("gap"),
+            func.coalesce(func.avg(L.duration), 0).label("avg_duration"),
+            _count_if(L.risk_level == HIGH_RISK).label("high_risk"),
+            _count_if(L.valid_discussion == VALID_DISCUSSION_YES).label("valid"),
+            _count_if(L.intimation == INTIMATION_GAP).label("gap"),
         )
-        .select_from(P)
-        .where(*filters.conditions(), P.call_date.is_not(None))
+        .select_from(L)
+        .where(*filters.conditions(), L.call_date.is_not(None))
         .group_by(period)
         .order_by(period)
     ).all()
@@ -263,10 +263,10 @@ def get_hourly_distribution(
         select(
             HOUR_EXPR.label("hour"),
             func.count().label("calls"),
-            func.coalesce(func.avg(P.duration), 0).label("avg_duration"),
+            func.coalesce(func.avg(L.duration), 0).label("avg_duration"),
         )
-        .select_from(P)
-        .where(*filters.conditions(), P.call_time.is_not(None))
+        .select_from(L)
+        .where(*filters.conditions(), L.call_time.is_not(None))
         .group_by(HOUR_EXPR)
         .order_by(HOUR_EXPR)
     ).all()
@@ -296,9 +296,9 @@ def get_risk_matrix(
     """Absence category cross-tabbed against risk level (heatmap)."""
     rows = db.execute(
         filters.apply(
-            select(P.category, P.risk_level, func.count().label("count"))
-            .select_from(P)
-            .group_by(P.category, P.risk_level)
+            select(L.category, L.risk_level, func.count().label("count"))
+            .select_from(L)
+            .group_by(L.category, L.risk_level)
         )
     ).all()
 
@@ -346,16 +346,16 @@ def list_employee_summaries(
     # Latest call's risk level: Postgres arrays are 1-indexed.
     latest_risk = type_coerce(
         func.array_agg(
-            aggregate_order_by(P.risk_level, P.call_date.desc().nullslast())
+            aggregate_order_by(L.risk_level, L.call_date.desc().nullslast())
         ),
         ARRAY(String),
     )[1]
 
     total_calls = func.count().label("total_calls")
-    high_risk = _count_if(P.risk_level == HIGH_RISK).label("high_risk_calls")
-    gap = _count_if(P.intimation == INTIMATION_GAP).label("intimation_gap_calls")
-    last_call = func.max(P.call_date).label("last_call_date")
-    avg_duration = func.coalesce(func.avg(P.duration), 0).label("avg_duration_seconds")
+    high_risk = _count_if(L.risk_level == HIGH_RISK).label("high_risk_calls")
+    gap = _count_if(L.intimation == INTIMATION_GAP).label("intimation_gap_calls")
+    last_call = func.max(L.call_date).label("last_call_date")
+    avg_duration = func.coalesce(func.avg(L.duration), 0).label("avg_duration_seconds")
 
     sortable = {
         EmployeeSort.total_calls: total_calls,
@@ -369,34 +369,34 @@ def list_employee_summaries(
 
     stmt = (
         select(
-            P.client_number,
-            func.max(P.client_name).label("client_name"),
+            L.client_number,
+            func.max(L.client_name).label("client_name"),
             total_calls,
-            func.min(P.call_date).label("first_call_date"),
+            func.min(L.call_date).label("first_call_date"),
             last_call,
-            func.coalesce(func.sum(P.duration), 0).label("talk_time"),
+            func.coalesce(func.sum(L.duration), 0).label("talk_time"),
             avg_duration,
             high_risk,
-            _count_if(P.valid_discussion == VALID_DISCUSSION_YES).label("valid"),
+            _count_if(L.valid_discussion == VALID_DISCUSSION_YES).label("valid"),
             gap,
-            _count_if(P.commitment == NO_COMMITMENT).label("no_commitment"),
-            func.mode().within_group(P.category).label("top_category"),
+            _count_if(L.commitment == NO_COMMITMENT).label("no_commitment"),
+            func.mode().within_group(L.category).label("top_category"),
             latest_risk.label("latest_risk_level"),
         )
-        .select_from(P)
+        .select_from(L)
         .where(*conds)
-        .group_by(P.client_number)
+        .group_by(L.client_number)
         .having(func.count() >= min_calls)
-        .order_by(ordering, P.client_number)
+        .order_by(ordering, L.client_number)
         .limit(limit)
         .offset(offset)
     )
 
     count_subq = (
-        select(P.client_number)
-        .select_from(P)
+        select(L.client_number)
+        .select_from(L)
         .where(*conds)
-        .group_by(P.client_number)
+        .group_by(L.client_number)
         .having(func.count() >= min_calls)
         .subquery()
     )
@@ -441,22 +441,22 @@ def get_filter_options(db: Session = Depends(get_db)) -> FilterOptions:
 
     bounds = db.execute(
         select(
-            func.min(P.call_date),
-            func.max(P.call_date),
-            func.min(P.duration),
-            func.max(P.duration),
-        ).select_from(P)
+            func.min(L.call_date),
+            func.max(L.call_date),
+            func.min(L.duration),
+            func.max(L.duration),
+        ).select_from(L)
     ).one()
 
     return FilterOptions(
-        categories=options(P.category),
-        risk_levels=options(P.risk_level),
-        commitments=options(P.commitment),
-        intimations=options(P.intimation),
-        valid_discussions=options(P.valid_discussion),
-        ai_analysis_confidences=options(P.ai_analysis_confidence),
-        analysis_statuses=options(P.analysis_status),
-        call_types=options(P.call_type),
+        categories=options(L.category),
+        risk_levels=options(L.risk_level),
+        commitments=options(L.commitment),
+        intimations=options(L.intimation),
+        valid_discussions=options(L.valid_discussion),
+        ai_analysis_confidences=options(L.ai_analysis_confidence),
+        analysis_statuses=options(L.analysis_status),
+        call_types=options(L.call_type),
         date_min=bounds[0],
         date_max=bounds[1],
         duration_min=bounds[2],

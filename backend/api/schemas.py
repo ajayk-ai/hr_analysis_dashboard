@@ -179,6 +179,24 @@ class EffectivenessResponse(BaseModel):
     metrics: list[EffectivenessMetric]
 
 
+class CallActivityResponse(BaseModel):
+    """HR dialling effort, straight from `call_logs` rather than the analysed
+    `preprocess_call_log` mirror: how many calls HR made and how many were
+    actually picked up.
+
+    `answered_calls` is duration > 0; `analysed_calls` is the subset that also
+    carries a recording and so reached the AI pipeline (the dashboard's
+    "processed calls"). The gap between them is answered calls with no
+    recording. Only the date filters apply -- see `date_conditions()`.
+    """
+
+    total_calls: int
+    answered_calls: int
+    unanswered_calls: int
+    analysed_calls: int
+    answer_rate: float
+
+
 class MonthPoint(BaseModel):
     month: str
     label: str
@@ -245,6 +263,7 @@ class HrDashboardResponse(BaseModel):
     """Everything the HR dashboard renders, in one round trip."""
 
     generated_for_month: str
+    call_activity: CallActivityResponse
     effectiveness: EffectivenessResponse
     monthly_valid_discussions: MonthlyTrendResponse
     current_month_cumulative: CumulativeResponse

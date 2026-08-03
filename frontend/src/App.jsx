@@ -23,6 +23,20 @@ function prettyMonth(month) {
   return `${MONTH_NAMES[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
 }
 
+// What each scope counts. `total_calls` is the default: every call HR dialled,
+// including the ones nobody picked up (which carry no AI analysis and so fall
+// into each breakdown's "Unspecified" bucket).
+const SCOPE_LABEL = {
+  total_calls: "all calls dialled",
+  all: "processed calls",
+  valid_only: "valid discussions",
+};
+const SCOPE_SERIES = {
+  total_calls: "Total calls",
+  all: "Processed calls",
+  valid_only: "Valid discussions",
+};
+
 /** Months between the data's first and last, newest first, for the filter. */
 function monthOptions(min, max) {
   if (!min || !max) return [];
@@ -69,7 +83,7 @@ export default function App() {
   const [month, setMonth] = useState("");
   const [category, setCategory] = useState("");
   const [riskLevel, setRiskLevel] = useState("");
-  const [scope, setScope] = useState("valid_only");
+  const [scope, setScope] = useState("total_calls");
 
   const params = useMemo(
     () => ({
@@ -137,6 +151,7 @@ export default function App() {
 
   const {
     effectiveness,
+    call_activity: activity,
     monthly_valid_discussions: monthly,
     current_month_cumulative: cumulative,
     category_trends: trends,
@@ -147,8 +162,8 @@ export default function App() {
     risk_analysis: risk,
   } = data;
 
-  const scopeLabel =
-    scope === "valid_only" ? "valid discussions" : "all processed calls";
+  const scopeLabel = SCOPE_LABEL[scope] ?? SCOPE_LABEL.total_calls;
+  const seriesLabel = SCOPE_SERIES[scope] ?? SCOPE_SERIES.total_calls;
   const commitmentColors = ordinalSteps(tokens, commitment.items.length);
   // Risk is ordered low -> high, so the ramp runs with it.
   const riskColors = ordinalSteps(tokens, risk.items.length);
@@ -165,9 +180,10 @@ export default function App() {
           <div>
             <h1>HR Absentee Follow-up Call AI Analytics</h1>
             <p className="sub">
-              {prettyMonth(data.generated_for_month)} · {scopeLabel} ·{" "}
-              {effectiveness.valid_discussions.toLocaleString()} of{" "}
-              {effectiveness.processed_rows.toLocaleString()} processed calls
+              {prettyMonth(data.generated_for_month)} · counting {scopeLabel} ·{" "}
+              {activity.total_calls.toLocaleString()} dialled →{" "}
+              {effectiveness.processed_rows.toLocaleString()} processed →{" "}
+              {effectiveness.valid_discussions.toLocaleString()} valid
             </p>
           </div>
         </div>
@@ -240,8 +256,9 @@ export default function App() {
             value={scope}
             onChange={(e) => setScope(e.target.value)}
           >
+            <option value="total_calls">Total calls</option>
+            <option value="all">Processed calls only</option>
             <option value="valid_only">Valid discussions only</option>
-            <option value="all">All processed calls</option>
           </select>
         </div>
         <div className="filters-spacer" />
@@ -251,7 +268,7 @@ export default function App() {
             setMonth("");
             setCategory("");
             setRiskLevel("");
-            setScope("valid_only");
+            setScope("total_calls");
           }}
         >
           <ResetIcon />
@@ -262,18 +279,21 @@ export default function App() {
       <div className={refetching ? "refetching" : undefined}>
         <KpiRow
           effectiveness={effectiveness}
+          callActivity={activity}
           risk={risk}
           intimation={intimation}
           cumulative={cumulative}
+          scopeLabel={scopeLabel}
           tokens={tokens}
         />
 
         <Section num="1" title="Six month trend analysis">
           <div className="grid-2">
             <div className="card">
-              <h3>Valid discussions by month</h3>
+              <h3>{seriesLabel} by month</h3>
               <p className="caption">
-                Rolling six months ending {prettyMonth(monthly.anchor_month)}.
+                Rolling six months ending {prettyMonth(monthly.anchor_month)} ·
+                counting {scopeLabel}.
               </p>
               <MonthlyBars data={monthly.points} tokens={tokens} />
               {showTables ? (
@@ -312,6 +332,41 @@ export default function App() {
         </Section>
 
         <Section num="2" title="Absentee reason analytics">
+          {/* HR call handling, from raw call_logs -- the reason cards below
+              only cover calls that were answered and analysed. */}
+          <div className="stat-strip">
+            <div className="stat">
+              <span className="stat-label">Calls dialled</span>
+              <span className="stat-value">
+                {activity.total_calls.toLocaleString()}
+              </span>
+            </div>
+            <div className="stat">
+              <span className="stat-label">Answered</span>
+              <span className="stat-value">
+                {activity.answered_calls.toLocaleString()}
+              </span>
+            </div>
+            <div className="stat">
+              <span className="stat-label">Not answered</span>
+              <span className="stat-value">
+                {activity.unanswered_calls.toLocaleString()}
+              </span>
+            </div>
+            <div className="stat">
+              <span className="stat-label">Answer rate</span>
+              <span className="stat-value">
+                {activity.answer_rate.toFixed(1)}%
+              </span>
+            </div>
+            <div className="stat">
+              <span className="stat-label">Analysed below</span>
+              <span className="stat-value">
+                {activity.analysed_calls.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
           <div className="grid-3">
             {trends.categories.map((cat) => (
               <div className="card" key={cat.category}>
@@ -346,6 +401,17 @@ export default function App() {
               </div>
             ))}
           </div>
+          <p className="notice">
+            Call handling counts come from <code>call_logs</code> (every call HR
+            dialled) and follow the Month filter only, so they stay a fixed
+            denominator whatever else you filter on. Only{" "}
+            {activity.analysed_calls.toLocaleString()} of them were answered
+            <em> and </em> recorded, so only those carry an AI reason — on the
+            default <strong>Total calls</strong> scope the remaining{" "}
+            {(activity.total_calls - activity.analysed_calls).toLocaleString()}{" "}
+            count as “Unspecified” in every breakdown below. Switch Scope to
+            Processed calls to drop them.
+          </p>
           <p className="notice">
             Blue columns are calls per month; the orange line is the cumulative
             run through {prettyMonth(trends.anchor_month)}. Two measures, two
