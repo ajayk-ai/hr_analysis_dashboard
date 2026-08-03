@@ -34,7 +34,27 @@ cd frontend && npm install && npm run dev         # dashboard on :5173
 ```
 
 The dev server proxies `/api` to `127.0.0.1:8000`, so the browser stays
-same-origin and CORS never applies. Set `VITE_API_BASE` to point elsewhere.
+same-origin and CORS never applies. `dev.bat` passes `VITE_API_PROXY_TARGET`
+so the proxy follows `API_PORT` from `.env`; set `VITE_API_BASE` to point the
+built app at a different host.
+
+### Windows scripts
+
+| | `dev.bat` | `start.bat` |
+|---|---|---|
+| For | editing locally | deploying on another machine |
+| Frontend | Vite dev server, **hot reload** | `npm run build`, served by FastAPI |
+| Backend | `uvicorn --reload` | plain `uvicorn` |
+| Build step | none | yes |
+| Binds | `127.0.0.1` only | `API_HOST` (default `0.0.0.0`) |
+| Open | `http://localhost:5173` | `http://localhost:8000` |
+| Also does | migrations; installs only what's missing | `uv sync --frozen`, creates the DB, migrates |
+
+`dev.bat fast` skips dependency checks and migrations and launches straight
+away. Both read `API_PORT` from `.env`; `dev.bat` also honours `VITE_PORT`.
+
+**In dev, use port 5173.** Port 8000 still serves the last built
+`frontend/dist`, which does not change as you edit.
 
 One-off sync without the API:
 
